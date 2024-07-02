@@ -32,6 +32,10 @@ builder.Services.AddAutoMapper(AppDomain.CurrentDomain.GetAssemblies());
 
 var app = builder.Build();
 
+var rangosEndPoints = app.MapGroup("/rangos");
+var rangosEndPointsId = rangosEndPoints.MapGroup("/{id:int}");
+var rangosEndPointIngredientes = rangosEndPointsId.MapGroup("/ingredientes");
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
@@ -45,10 +49,10 @@ if (app.Environment.IsDevelopment())
 
 app.MapControllers();
 
-app.MapGet("/", async (RangoDbContext rangoDbContext)
-    => Results.Ok(await rangoDbContext.Rangos.ToListAsync()));
+//rangosEndPoints.MapGet("/", async (RangoDbContext rangoDbContext)
+//    => Results.Ok(await rangoDbContext.Rangos.ToListAsync()));
 
-app.MapGet("/rangos", async Task<Results<NoContent, Ok<IEnumerable<RangoDTO>>>>
+rangosEndPoints.MapGet("", async Task<Results<NoContent, Ok<IEnumerable<RangoDTO>>>>
     ([FromQuery(Name = "name")] string? rangoNome,
     RangoDbContext rangoDbContext,
     IMapper mapper) =>
@@ -62,36 +66,82 @@ app.MapGet("/rangos", async Task<Results<NoContent, Ok<IEnumerable<RangoDTO>>>>
         return TypedResults.Ok(mapper.Map<IEnumerable<RangoDTO>>(rangosEntity));
 });
 
-app.MapGet("/rangos/{rangoId:int}/ingredientes", async (
-    int rangoId,
+rangosEndPointIngredientes.MapGet("", async (
+    int id,
     RangoDbContext rangoDbContext,
     IMapper mapper) =>
 {
     return mapper.Map<IEnumerable<IngredienteDTO>>((await rangoDbContext.Rangos
                                .Include(rango => rango.Ingredientes)
-                               .FirstOrDefaultAsync(rango => rango.Id == rangoId))?.Ingredientes);
+                               .FirstOrDefaultAsync(rango => rango.Id == id))?.Ingredientes);
 });
 
-app.MapGet("/rangos/{id}", async (
+rangosEndPointsId.MapGet("", async (
     int id,
     RangoDbContext rangoDbContext,
     IMapper mapper) =>
 {
     return mapper.Map<RangoDTO>((await rangoDbContext.Rangos
     .Where(x => x.Id == id).FirstOrDefaultAsync()));
-});
+}).WithName("GetRango");
 
-app.MapPost("/rango", async (
+rangosEndPoints.MapPost("", async Task<CreatedAtRoute<RangoDTO>> (
     RangoDbContext rangoDbContext,
     IMapper mapper,
     [FromBody] RangoForCreationDTO rangoForCreationDTO) =>
-{
-    var rangoEntity = mapper.Map<Rango>(rangoForCreationDTO);
-    rangoDbContext.Add(rangoEntity);
-    await rangoDbContext.SaveChangesAsync();
+    //LinkGenerator linkGenerator,
+    //HttpContext httpContext) =>
+    {
+        var rangoEntity = mapper.Map<Rango>(rangoForCreationDTO);
+        rangoDbContext.Add(rangoEntity);
+        await rangoDbContext.SaveChangesAsync();
 
-    var rangoToReturn = mapper.Map<RangoForCreationDTO>(rangoEntity);
-    return TypedResults.Ok(rangoToReturn);
-});
+        var rangoToReturn = mapper.Map<RangoDTO>(rangoEntity);
+
+        return TypedResults.CreatedAtRoute(rangoToReturn, "GetRango", new { id = rangoToReturn.Id });
+
+        // Referencia para alunos
+        //var linkToReturn = linkGenerator.GetUriByName(
+        //    httpContext,
+        //    "GetRango",
+        //    new { id = rangoToReturn.Id });
+
+        //return TypedResults.Created(linkToReturn, rangoToReturn);
+    }
+);
+
+rangosEndPointsId.MapPut("", async Task<Results<NotFound, Ok>> (
+    int id,
+    RangoDbContext rangoDbContext,
+    [FromBody] RangoForCreationDTO rangoForCreationDTO,
+    IMapper mapper) =>
+    {
+        var rangoEntity = await rangoDbContext.Rangos.FirstOrDefaultAsync(x => x.Id == id);
+        if (rangoEntity == null)
+            return TypedResults.NotFound();
+
+        mapper.Map(rangoForCreationDTO, rangoEntity);
+
+        await rangoDbContext.SaveChangesAsync();
+        
+        return TypedResults.Ok();
+    }
+);
+
+rangosEndPointsId.MapDelete("", async Task<Results<NotFound, NoContent>> (
+    int id,
+    RangoDbContext rangoDbContext) =>
+    {
+        var rangosEntity = await rangoDbContext.Rangos.FirstOrDefaultAsync(x => x.Id == id);
+        if (rangosEntity == null)
+            return TypedResults.NotFound();
+
+        rangoDbContext.Rangos.Remove(rangosEntity);
+
+        await rangoDbContext.SaveChangesAsync();
+
+        return TypedResults.NoContent();
+    }
+);
 
 app.Run();
