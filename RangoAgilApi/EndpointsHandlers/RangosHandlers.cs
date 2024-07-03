@@ -27,10 +27,14 @@ public static class RangosHandlers
     public static async Task<Results<NotFound, Ok<RangoDTO>>> GetRangosByIdAsync (
     int id,
     RangoDbContext rangoDbContext,
-    IMapper mapper)
+    IMapper mapper,
+    ILogger<RangoDTO> logger)
     {
         var rangoEntity = await rangoDbContext.Rangos
         .Where(x => x.Id == id).FirstOrDefaultAsync();
+
+        logger.LogInformation("retronou: " + rangoEntity?.Name);// Mesmo que .Name ?? "");
+        logger.LogInformation("retronou: " + rangoEntity?.Name ?? "vazio");
 
         if (rangoEntity == null)
             return TypedResults.NotFound();
